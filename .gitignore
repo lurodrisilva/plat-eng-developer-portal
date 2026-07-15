@@ -6,3 +6,6 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# agent/orchestration state (plat-eng-azure-harness)
+.omc/
