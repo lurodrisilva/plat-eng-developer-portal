@@ -26,12 +26,20 @@ export interface Resource {
   color: string;
 }
 
+// TargetEnvironment is the deployment environment the overlay targets. The
+// tunable allowlist is keyed per environment server-side, so the same knob can
+// be tunable in one and platform-locked in another (e.g. autoscaling is a
+// developer knob in development but platform-managed in production).
+export type TargetEnvironment = 'development' | 'staging' | 'production';
+
 // Tunables is the J3 custom-tuning state captured by the create wizard and
 // sent to the orchestrator's validate endpoint as a Helm values overlay.
 // minReplicas/maxReplicas/cpuRequest/memoryRequest are on the tunable allowlist;
 // runAsRoot flips a platform-locked knob (securityContext.runAsNonRoot) to
-// demonstrate the guardrail refusing an override.
+// demonstrate the guardrail refusing an override. environment selects which
+// per-environment allowlist the orchestrator evaluates against.
 export interface Tunables {
+  environment: TargetEnvironment;
   minReplicas: number;
   maxReplicas: number;
   cpuRequest: string;
@@ -41,8 +49,10 @@ export interface Tunables {
 
 // ValidateResult is the orchestrator's advisory verdict for a values overlay
 // (POST /api/v1/deployments:validate). blocked === would be rejected at create
-// (enforce mode); violations are the platform-locked keys the overlay touched.
+// (enforce mode); violations are the platform-locked keys the overlay touched;
+// environment echoes which per-environment rule the verdict was computed for.
 export interface ValidateResult {
+  environment: string;
   mode: string;
   violations: string[];
   blocked: boolean;
