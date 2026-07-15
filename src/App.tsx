@@ -6,10 +6,14 @@ import { NewProjectInit } from './components/NewProjectInit';
 import { ConfigureApp } from './components/ConfigureApp';
 import { ConfirmAssembly } from './components/ConfirmAssembly';
 import { AppDetails } from './components/AppDetails';
-import { Screen } from './types';
+import { Screen, Tunables } from './types';
+import { DEFAULT_TUNABLES } from './lib/api';
 
 const App: React.FC = () => {
   const [currentScreen, setCurrentScreen] = useState<Screen>('dashboard');
+  // J3 custom-tuning state, shared between the config wizard (writes) and the
+  // confirm screen (validates against the orchestrator BFF).
+  const [tunables, setTunables] = useState<Tunables>(DEFAULT_TUNABLES);
 
   const renderScreen = () => {
     switch (currentScreen) {
@@ -18,13 +22,13 @@ const App: React.FC = () => {
       case 'new-project-init':
         return <NewProjectInit setScreen={setCurrentScreen} />;
       case 'configure-app':
-        return <ConfigureApp setScreen={setCurrentScreen} />;
+        return <ConfigureApp setScreen={setCurrentScreen} tunables={tunables} setTunables={setTunables} />;
       case 'confirm-assembly':
-        return <ConfirmAssembly setScreen={setCurrentScreen} />;
+        return <ConfirmAssembly setScreen={setCurrentScreen} tunables={tunables} />;
       case 'app-details':
         return <AppDetails setScreen={setCurrentScreen} />;
       case 'edit-app':
-        return <ConfigureApp setScreen={setCurrentScreen} />; // Reuse for demo
+        return <ConfigureApp setScreen={setCurrentScreen} tunables={tunables} setTunables={setTunables} />; // Reuse for demo
       default:
         return <Dashboard setScreen={setCurrentScreen} />;
     }
