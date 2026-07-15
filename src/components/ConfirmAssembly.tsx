@@ -152,8 +152,8 @@ export const ConfirmAssembly: React.FC<ConfirmAssemblyProps> = ({ setScreen, tun
             <div className="text-sm">
               <p className={cn('font-bold', result.blocked ? 'text-[#7f1d1d]' : 'text-[#7c2d12]')}>
                 {result.blocked
-                  ? 'Platform-locked knob — create refused'
-                  : `Platform-locked knob overridden (${result.mode} mode)`}
+                  ? `Platform-locked in ${result.environment} — create refused`
+                  : `Platform-locked knob overridden in ${result.environment} (${result.mode} mode)`}
               </p>
               <p className="text-xs mt-1 text-[#424655]">
                 {result.blocked
@@ -172,7 +172,7 @@ export const ConfirmAssembly: React.FC<ConfirmAssemblyProps> = ({ setScreen, tun
         <section className="col-span-12 flex flex-col md:flex-row items-center justify-between gap-6 py-8 px-8 bg-[#e6f6ff] rounded-2xl border border-[#0056c5]/10 mb-12">
           <div className="max-w-md">
             <h4 className="font-bold text-lg mb-1 text-[#001f2a]">Final Authorization</h4>
-            <p className="text-sm text-[#424655]">By proceeding, you authorize the creation of the resources listed above in the <code>prod-us-east-1</code> environment.</p>
+            <p className="text-sm text-[#424655]">By proceeding, you authorize the creation of the resources listed above in the <code>{tunables.environment}</code> environment.</p>
           </div>
           <div className="flex items-center gap-4 w-full md:w-auto">
             <button

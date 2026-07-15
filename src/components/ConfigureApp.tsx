@@ -1,6 +1,6 @@
 import React from 'react';
 import { Database, Cloud, MemoryStick, Check, ArrowRight, Rocket, Info } from 'lucide-react';
-import { Screen, Tunables } from '@/src/types';
+import { Screen, Tunables, TargetEnvironment } from '@/src/types';
 import { cn } from '@/src/lib/utils';
 
 interface ConfigureAppProps {
@@ -83,6 +83,32 @@ export const ConfigureApp: React.FC<ConfigureAppProps> = ({ setScreen, tunables,
                 </div>
                 <p className="text-[10px] text-[#424655]/70 italic">Maximum response time for 95% of requests.</p>
               </div>
+            </div>
+          </section>
+
+          {/* Target Environment — the tunable allowlist is keyed per environment
+              server-side, so the same knob can be tunable here and locked there.
+              Switching this re-evaluates the overlay against that environment's
+              rules on the confirm step (e.g. tuning replicas is refused in
+              production but allowed in development). */}
+          <section className="bg-white p-8 rounded-xl shadow-sm border border-[#c2c6d7]/10">
+            <h2 className="text-sm font-bold uppercase tracking-widest text-[#424655] mb-6">Target Environment</h2>
+            <div className="space-y-2">
+              <label htmlFor="target-environment" className="block text-sm font-semibold text-[#001f2a]">Deploy to</label>
+              <select
+                id="target-environment"
+                className="w-full bg-[#e6f6ff] border-none rounded-lg p-3 text-on-surface focus:ring-2 focus:ring-[#0056c5] transition-all cursor-pointer"
+                value={tunables.environment}
+                onChange={(e) => setTunables({ ...tunables, environment: e.target.value as TargetEnvironment })}
+              >
+                <option value="development">Development</option>
+                <option value="staging">Staging</option>
+                <option value="production">Production</option>
+              </select>
+              <p className="text-[10px] text-[#424655]/70 italic">
+                Governs which per-environment guardrails apply. Production locks
+                autoscaling and limits (platform-managed); development lets you tune them.
+              </p>
             </div>
           </section>
 
