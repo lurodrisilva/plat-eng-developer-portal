@@ -1,13 +1,15 @@
 import React from 'react';
 import { Database, Cloud, MemoryStick, Check, ArrowRight, Rocket, Info } from 'lucide-react';
-import { Screen } from '@/src/types';
+import { Screen, Tunables } from '@/src/types';
 import { cn } from '@/src/lib/utils';
 
 interface ConfigureAppProps {
   setScreen: (screen: Screen) => void;
+  tunables: Tunables;
+  setTunables: (t: Tunables) => void;
 }
 
-export const ConfigureApp: React.FC<ConfigureAppProps> = ({ setScreen }) => {
+export const ConfigureApp: React.FC<ConfigureAppProps> = ({ setScreen, tunables, setTunables }) => {
   return (
     <div className="max-w-5xl mx-auto animate-in fade-in duration-500">
       <div className="mb-8">
@@ -113,12 +115,12 @@ export const ConfigureApp: React.FC<ConfigureAppProps> = ({ setScreen }) => {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium">CPU Requests</span>
-                    <span className="text-xs font-bold font-mono">500m</span>
+                    <span className="text-xs font-bold font-mono">{tunables.cpuRequest}</span>
                   </div>
                   <input className="w-full h-1.5 bg-[#d9f2ff] rounded-lg appearance-none cursor-pointer accent-[#0056c5]" type="range" />
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium">Memory Requests</span>
-                    <span className="text-xs font-bold font-mono">1Gi</span>
+                    <span className="text-xs font-bold font-mono">{tunables.memoryRequest}</span>
                   </div>
                   <input className="w-full h-1.5 bg-[#d9f2ff] rounded-lg appearance-none cursor-pointer accent-[#0056c5]" type="range" />
                 </div>
@@ -130,11 +132,21 @@ export const ConfigureApp: React.FC<ConfigureAppProps> = ({ setScreen }) => {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <label className="text-[10px] text-[#424655] font-bold uppercase">Min Replicas</label>
-                    <input className="w-full bg-[#d9f2ff] border-none rounded p-2 text-xs font-mono" type="number" defaultValue={2} />
+                    <input
+                      className="w-full bg-[#d9f2ff] border-none rounded p-2 text-xs font-mono"
+                      type="number"
+                      value={tunables.minReplicas}
+                      onChange={(e) => setTunables({ ...tunables, minReplicas: Number(e.target.value) })}
+                    />
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] text-[#424655] font-bold uppercase">Max Replicas</label>
-                    <input className="w-full bg-[#d9f2ff] border-none rounded p-2 text-xs font-mono" type="number" defaultValue={10} />
+                    <input
+                      className="w-full bg-[#d9f2ff] border-none rounded p-2 text-xs font-mono"
+                      type="number"
+                      value={tunables.maxReplicas}
+                      onChange={(e) => setTunables({ ...tunables, maxReplicas: Number(e.target.value) })}
+                    />
                   </div>
                 </div>
                 <div className="p-3 bg-[#ceedfd]/30 rounded border-l-4 border-[#0056c5]">
@@ -142,6 +154,28 @@ export const ConfigureApp: React.FC<ConfigureAppProps> = ({ setScreen }) => {
                 </div>
               </div>
             </div>
+          </section>
+
+          {/* Security Context — a platform-locked knob (guardrail G4). Toggling
+              it on adds securityContext.runAsNonRoot=false to the overlay, which
+              the orchestrator refuses at create (surfaced on the confirm step). */}
+          <section className="bg-white p-8 rounded-xl shadow-sm border border-[#c2c6d7]/10">
+            <h2 className="text-sm font-bold uppercase tracking-widest text-[#424655] mb-6">Security Context</h2>
+            <label className="flex items-center justify-between gap-4 cursor-pointer">
+              <span>
+                <span className="block text-sm font-semibold text-[#001f2a]">Run container as root</span>
+                <span className="block text-xs text-[#424655] mt-1">
+                  Overrides <code className="font-mono">securityContext.runAsNonRoot</code> — a platform-locked knob
+                  (guardrail G4). The orchestrator refuses this override at create.
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                checked={tunables.runAsRoot}
+                onChange={(e) => setTunables({ ...tunables, runAsRoot: e.target.checked })}
+                className="h-5 w-5 accent-[#0056c5] cursor-pointer shrink-0"
+              />
+            </label>
           </section>
         </div>
 
