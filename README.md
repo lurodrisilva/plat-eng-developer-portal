@@ -1,20 +1,37 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# xp.dev — Developer Portal
 
-# Run and deploy your AI Studio app
+The **Developer Control Plane (DCP)** UI for the Azure Platform Engineering paved road: a
+React SPA where a stream-aligned team creates and operates apps (paved-default create **J0**,
+AI-assisted **J1/J2**, on-road custom-tuning **J3**). Seeded verbatim from the xp.dev
+reference-UX prototype (built in Google AI Studio).
 
-This contains everything you need to run your app locally.
+> Part of **[plat-eng-azure-harness](https://github.com/lurodrisilva/plat-eng-azure-harness)**.
+> Topology + rationale: **ADR-0012** (repo topology) and **ADR-0006** (productionize xp.dev as the
+> DCP, orchestrator as its BFF).
 
-View your app in AI Studio: https://ai.studio/apps/0143acb5-467e-4c99-8176-14ddab6299d1
+## Status
 
-## Run Locally
+Thin UI, **mock data** — this is the faithful baseline. Governance stays server-side (ADR-0006):
+wiring the screens to the platform orchestrator (real API, J3 tunable-allowlist validation at the
+boundary) is a **later slice**. The app renders entirely on mock data and needs **no API key** to run.
 
-**Prerequisites:**  Node.js
+## Stack
 
+React 19 · Vite 6 · TypeScript · Tailwind CSS v4 · lucide-react · recharts · motion.
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## Run locally
+
+**Prerequisites:** Node.js 22+
+
+```bash
+npm ci        # install (uses the committed package-lock.json)
+npm run dev    # dev server on http://localhost:3000
+npm run build  # production build -> dist/
+npm run lint   # tsc --noEmit typecheck
+```
+
+## Secrets
+
+Nothing is required to run the current build. A future BFF-wiring slice may call Gemini / the
+orchestrator; if so, set `GEMINI_API_KEY` in a local `.env.local` (gitignored — see `.env.example`).
+Never commit a key: governance is server-side, and the client never holds secrets.
