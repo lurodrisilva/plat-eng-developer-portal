@@ -10,23 +10,30 @@ import {
   AreaChart,
   Area
 } from 'recharts';
-import { 
-  ArrowLeft, 
-  Activity, 
-  Zap, 
-  ShieldCheck, 
-  Clock, 
-  Cpu, 
-  HardDrive, 
+import {
+  ArrowLeft,
+  Activity,
+  Zap,
+  ShieldCheck,
+  Clock,
+  Cpu,
+  HardDrive,
   ExternalLink,
   Sparkles,
   ChevronRight,
-  Settings
+  Settings,
+  Loader2
 } from 'lucide-react';
-import { Screen } from '@/src/types';
+import { AppIdentity, Screen } from '@/src/types';
+import { isTerminalStatus } from '@/src/lib/api';
+import { useDeploymentStatus } from '@/src/lib/useDeploymentStatus';
+import { cn } from '@/src/lib/utils';
 
 interface AppDetailsProps {
   setScreen: (screen: Screen) => void;
+  // When a real deployment exists, its live status is rendered over the mock metrics.
+  deploymentId: string | null;
+  appIdentity: AppIdentity | null;
 }
 
 const performanceData = [
@@ -39,12 +46,18 @@ const performanceData = [
   { time: '23:59', latency: 50, tps: 140 },
 ];
 
-export const AppDetails: React.FC<AppDetailsProps> = ({ setScreen }) => {
+export const AppDetails: React.FC<AppDetailsProps> = ({ setScreen, deploymentId, appIdentity }) => {
+  // Live status for a real deployment (null id disables polling → mock view).
+  const { status, polling } = useDeploymentStatus(deploymentId);
+  const isLive = deploymentId != null;
+  const failed = status ? ['FAILED', 'REJECTED', 'ROLLED_BACK', 'DEGRADED'].includes(status.status) : false;
+  const title = isLive ? appIdentity?.name ?? status?.applicationId ?? 'Application' : 'Inventory-Service-API';
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <button 
+          <button
             onClick={() => setScreen('dashboard')}
             className="p-2 hover:bg-[#e6f6ff] rounded-full text-[#424655] transition-colors"
           >
@@ -52,10 +65,16 @@ export const AppDetails: React.FC<AppDetailsProps> = ({ setScreen }) => {
           </button>
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-3xl font-extrabold text-[#001f2a] tracking-tight">Inventory-Service-API</h1>
-              <span className="px-2 py-0.5 bg-[#ceedfd] text-[#0056c5] text-[10px] font-bold rounded uppercase">Production</span>
+              <h1 className="text-3xl font-extrabold text-[#001f2a] tracking-tight">{title}</h1>
+              <span className="px-2 py-0.5 bg-[#ceedfd] text-[#0056c5] text-[10px] font-bold rounded uppercase">
+                {isLive ? status?.environment ?? 'Deploying' : 'Production'}
+              </span>
             </div>
-            <p className="text-[#424655] text-sm mt-1">AWS EKS • us-east-1 • Node.js 18.x</p>
+            <p className="text-[#424655] text-sm mt-1">
+              {isLive
+                ? `${status?.cluster ?? 'in-cluster'} • ${status?.namespace ?? '—'}`
+                : 'AWS EKS • us-east-1 • Node.js 18.x'}
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -72,6 +91,45 @@ export const AppDetails: React.FC<AppDetailsProps> = ({ setScreen }) => {
           </button>
         </div>
       </div>
+
+      {isLive && (
+        <section className="bg-white rounded-2xl p-6 shadow-sm border border-[#c2c6d7]/10">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <Activity className="w-5 h-5 text-[#0056c5]" />
+              <h3 className="text-sm font-bold uppercase tracking-wider text-[#424655]">Live Deployment Status</h3>
+              {polling && <Loader2 className="w-4 h-4 text-[#0056c5] animate-spin" />}
+            </div>
+            <span className="text-xs px-2 py-1 bg-[#e6f6ff] text-[#0056c5] rounded font-mono">{deploymentId}</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="p-4 rounded-xl border border-[#c2c6d7]/10">
+              <p className="text-[10px] uppercase font-bold text-[#424655]/60 mb-2">Status</p>
+              <span className={cn(
+                'inline-block px-2.5 py-1 rounded-md text-xs font-bold font-mono uppercase',
+                failed ? 'bg-[#fde8e8] text-[#b91c1c]' : 'bg-[#e6f6ff] text-[#0056c5]',
+              )}>
+                {status?.status ?? 'RECEIVED'}
+              </span>
+            </div>
+            <div className="p-4 rounded-xl border border-[#c2c6d7]/10">
+              <p className="text-[10px] uppercase font-bold text-[#424655]/60 mb-2">Argo Sync</p>
+              <span className="inline-block px-2.5 py-1 rounded-md text-xs font-bold font-mono uppercase bg-[#f4faff] text-[#001f2a]">
+                {status?.argoSyncStatus ?? '—'}
+              </span>
+            </div>
+            <div className="p-4 rounded-xl border border-[#c2c6d7]/10">
+              <p className="text-[10px] uppercase font-bold text-[#424655]/60 mb-2">Argo Health</p>
+              <span className="inline-block px-2.5 py-1 rounded-md text-xs font-bold font-mono uppercase bg-[#f4faff] text-[#001f2a]">
+                {status?.argoHealthStatus ?? '—'}
+              </span>
+            </div>
+          </div>
+          {status?.error && (
+            <p className="mt-4 text-xs font-mono text-[#b91c1c]">{status.error}</p>
+          )}
+        </section>
+      )}
 
       <div className="grid grid-cols-12 gap-6">
         {/* Left Column: Metrics */}
