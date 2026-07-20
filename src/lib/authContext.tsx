@@ -1,6 +1,14 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import type { AccountInfo } from '@azure/msal-browser';
-import { authConfigured, getAccount, getToken, initAuth, signIn, signOut } from './auth';
+import {
+  authConfigured,
+  getAccount,
+  getToken,
+  getTokenSilent,
+  initAuth,
+  signIn,
+  signOut,
+} from './auth';
 
 // AuthContextValue is the auth surface every screen consumes. The action
 // functions are the module-level MSAL wrappers (stable identities); account +
@@ -12,7 +20,13 @@ interface AuthContextValue {
   ready: boolean;
   signIn: () => void;
   signOut: () => void;
+  // getToken is INTERACTIVE: it may trigger a full-page sign-in redirect when the
+  // session has lapsed. Use it only for explicit user actions (Create/Scaffold).
   getToken: () => Promise<string>;
+  // getTokenSilent NEVER redirects — returns "" when a token can't be obtained
+  // silently. Passive background pollers (deployment status) must use this so a
+  // lapsed session cannot navigate the user away from the view.
+  getTokenSilent: () => Promise<string>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -42,7 +56,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ account, authConfigured, ready, signIn, signOut, getToken }),
+    () => ({ account, authConfigured, ready, signIn, signOut, getToken, getTokenSilent }),
     [account, ready],
   );
 

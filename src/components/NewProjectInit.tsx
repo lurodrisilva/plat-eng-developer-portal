@@ -25,7 +25,7 @@ interface NewProjectInitProps {
 type ScaffoldPhase = 'form' | 'creating' | 'polling' | 'ready';
 
 export const NewProjectInit: React.FC<NewProjectInitProps> = ({ setScreen, setAppIdentity }) => {
-  const { authConfigured, account, getToken } = useAuth();
+  const { authConfigured, account, getToken, getTokenSilent } = useAuth();
 
   const [name, setName] = useState('');
   const [team, setTeam] = useState('');
@@ -51,7 +51,10 @@ export const NewProjectInit: React.FC<NewProjectInitProps> = ({ setScreen, setAp
 
     const poll = async () => {
       try {
-        const token = authConfigured ? await getToken() : '';
+        // Silent — a passive poll must not redirect mid-scaffold. On a lapsed
+        // session the token is "" and the poll surfaces a 401 error instead of
+        // navigating away; the user re-authenticates via an explicit action.
+        const token = authConfigured ? await getTokenSilent() : '';
         const status = await getApp(scaffold.appName, token);
         if (cancelled) return;
         setAppStatus(status);
@@ -71,7 +74,7 @@ export const NewProjectInit: React.FC<NewProjectInitProps> = ({ setScreen, setAp
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [phase, scaffold, authConfigured, getToken]);
+  }, [phase, scaffold, authConfigured, getTokenSilent]);
 
   const handleScaffold = async () => {
     setError(null);

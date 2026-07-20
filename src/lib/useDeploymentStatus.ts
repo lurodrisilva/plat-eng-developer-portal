@@ -20,7 +20,7 @@ export function useDeploymentStatus(
   deploymentId: string | null,
   intervalMs = 4000,
 ): DeploymentStatusState {
-  const { authConfigured, account, getToken } = useAuth();
+  const { authConfigured, account, getTokenSilent } = useAuth();
   const [status, setStatus] = useState<DeploymentStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [polling, setPolling] = useState(false);
@@ -44,7 +44,10 @@ export function useDeploymentStatus(
 
     const poll = async () => {
       try {
-        const token = authConfigured ? await getToken() : '';
+        // Silent only — a passive poll must never redirect the page. GET
+        // /deployments/{id} is not Bearer-guarded, so "" is fine; the token is
+        // attached when available for correlation/consistency.
+        const token = authConfigured ? await getTokenSilent() : '';
         const dto = await getDeployment(deploymentId, token);
         if (cancelled) return;
         setStatus(dto);
@@ -67,8 +70,8 @@ export function useDeploymentStatus(
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-    // getToken/authConfigured/account come from a stable module-backed context.
-  }, [deploymentId, intervalMs, authConfigured, account]);
+    // getTokenSilent/authConfigured/account come from a stable module-backed context.
+  }, [deploymentId, intervalMs, authConfigured, account, getTokenSilent]);
 
   return { status, error, polling };
 }

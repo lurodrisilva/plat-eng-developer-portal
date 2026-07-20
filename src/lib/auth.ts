@@ -119,3 +119,21 @@ export async function getToken(): Promise<string> {
     throw e;
   }
 }
+
+// getTokenSilent is the PASSIVE-context accessor: it NEVER triggers an
+// interactive redirect. Background pollers (deployment status) must use this —
+// getToken() would navigate the page away mid-view if the session lapsed. It
+// returns "" whenever a token can't be obtained silently (no active account, or
+// Entra requires interaction); the caller then simply skips this poll tick and
+// leaves re-authentication to an explicit user action (Sign in / Create).
+export async function getTokenSilent(): Promise<string> {
+  if (!msal) return '';
+  const account = msal.getActiveAccount();
+  if (!account) return '';
+  try {
+    const result = await msal.acquireTokenSilent({ scopes: SCOPES, account });
+    return result.accessToken;
+  } catch {
+    return '';
+  }
+}
