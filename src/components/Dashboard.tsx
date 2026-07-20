@@ -1,13 +1,73 @@
 import React from 'react';
-import { Plus, Layers, Database, Webhook, MoreVertical, CheckCircle2, Cloud, MemoryStick, Network } from 'lucide-react';
-import { Application, Resource, Screen } from '@/src/types';
+import { Plus, Layers, Database, Webhook, MoreVertical, CheckCircle2, Cloud, MemoryStick, Network, Rocket, Loader2 } from 'lucide-react';
+import { AppIdentity, Application, Resource, Screen } from '@/src/types';
+import { isTerminalStatus } from '@/src/lib/api';
+import { useDeploymentStatus } from '@/src/lib/useDeploymentStatus';
 import { cn } from '@/src/lib/utils';
 
 interface DashboardProps {
   setScreen: (screen: Screen) => void;
+  // Set once a real deployment has been created — drives the live app card.
+  deploymentId: string | null;
+  appIdentity: AppIdentity | null;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ setScreen }) => {
+// LiveAppCard renders the just-created application, polling GET
+// /api/v1/deployments/{id} for its real status instead of the mock rows below.
+const LiveAppCard: React.FC<{ deploymentId: string; appIdentity: AppIdentity | null; setScreen: (s: Screen) => void }> = ({
+  deploymentId,
+  appIdentity,
+  setScreen,
+}) => {
+  const { status, polling } = useDeploymentStatus(deploymentId);
+  const terminal = isTerminalStatus(status?.status);
+  const failed = status ? ['FAILED', 'REJECTED', 'ROLLED_BACK', 'DEGRADED'].includes(status.status) : false;
+
+  return (
+    <div
+      onClick={() => setScreen('app-details')}
+      className="bg-white rounded-xl p-5 shadow-sm hover:shadow-md transition-all group border-2 border-[#0056c5]/20 cursor-pointer"
+    >
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 bg-[#0056c5]/5 rounded-xl flex items-center justify-center text-[#0056c5] group-hover:bg-[#0056c5] group-hover:text-white transition-colors">
+            <Rocket className="w-6 h-6" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h4 className="font-bold text-[#001f2a] text-lg">{appIdentity?.name ?? status?.applicationId ?? 'New Application'}</h4>
+              <span className="px-2 py-0.5 bg-[#ceedfd] text-[#0056c5] text-[10px] font-bold rounded uppercase">Live</span>
+            </div>
+            <p className="text-xs text-[#424655] font-mono">{deploymentId}</p>
+          </div>
+        </div>
+        {polling && <Loader2 className="w-5 h-5 text-[#0056c5] animate-spin" />}
+      </div>
+
+      <div className="grid grid-cols-3 gap-4 mt-6">
+        <div className="bg-[#e6f6ff] rounded-lg p-3">
+          <p className="text-[10px] uppercase font-bold text-[#424655]/60 mb-1">Status</p>
+          <span className={cn(
+            'text-sm font-semibold font-mono',
+            failed ? 'text-[#b91c1c]' : 'text-[#001f2a]',
+          )}>
+            {status?.status ?? 'RECEIVED'}
+          </span>
+        </div>
+        <div className="bg-[#e6f6ff] rounded-lg p-3">
+          <p className="text-[10px] uppercase font-bold text-[#424655]/60 mb-1">Argo Sync</p>
+          <span className="text-sm font-semibold font-mono text-[#001f2a]">{status?.argoSyncStatus ?? '—'}</span>
+        </div>
+        <div className="bg-[#e6f6ff] rounded-lg p-3">
+          <p className="text-[10px] uppercase font-bold text-[#424655]/60 mb-1">Argo Health</p>
+          <span className="text-sm font-semibold font-mono text-[#001f2a]">{status?.argoHealthStatus ?? '—'}</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export const Dashboard: React.FC<DashboardProps> = ({ setScreen, deploymentId, appIdentity }) => {
   const apps: Application[] = [
     {
       id: '1',
@@ -69,6 +129,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ setScreen }) => {
             <h3 className="text-sm font-bold uppercase tracking-widest text-[#424655]">Active Applications</h3>
             <span className="text-xs font-medium bg-[#ceedfd] px-2 py-1 rounded-md text-[#0056c5]">6 Applications Total</span>
           </div>
+
+          {deploymentId && (
+            <LiveAppCard deploymentId={deploymentId} appIdentity={appIdentity} setScreen={setScreen} />
+          )}
 
           {apps.map((app) => (
             <div 

@@ -1,15 +1,17 @@
 import React from 'react';
 import { Database, Cloud, MemoryStick, Check, ArrowRight, Rocket, Info } from 'lucide-react';
-import { Screen, Tunables, TargetEnvironment } from '@/src/types';
+import { AppIdentity, Screen, Tunables, TargetEnvironment } from '@/src/types';
 import { cn } from '@/src/lib/utils';
 
 interface ConfigureAppProps {
   setScreen: (screen: Screen) => void;
   tunables: Tunables;
   setTunables: (t: Tunables) => void;
+  // The app captured by the scaffold step; null on the mock demo paths.
+  appIdentity: AppIdentity | null;
 }
 
-export const ConfigureApp: React.FC<ConfigureAppProps> = ({ setScreen, tunables, setTunables }) => {
+export const ConfigureApp: React.FC<ConfigureAppProps> = ({ setScreen, tunables, setTunables, appIdentity }) => {
   return (
     <div className="max-w-5xl mx-auto animate-in fade-in duration-500">
       <div className="mb-8">
@@ -216,7 +218,7 @@ export const ConfigureApp: React.FC<ConfigureAppProps> = ({ setScreen, tunables,
                 </div>
                 <div>
                   <p className="text-xs font-bold text-[#424655] uppercase">Application Name</p>
-                  <p className="text-sm font-semibold">payment-gateway-v2</p>
+                  <p className="text-sm font-semibold">{appIdentity?.name ?? 'payment-gateway-v2'}</p>
                 </div>
               </div>
               <div className="space-y-3 px-1">
