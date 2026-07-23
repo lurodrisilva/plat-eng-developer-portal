@@ -180,6 +180,11 @@ export interface DeploymentDefaults {
   imageRepository: string;
   imageTag: string;
   imageDigest: string;
+  // The commit the default image was built from. Sent as source.gitSha: the
+  // orchestrator's domain requires a ≥7-char sha (it drives the deployment
+  // version / component id / ArgoCD app name via ShortSHA). A portal deploy has
+  // no CI run, so this is the only provenance field that must be non-empty.
+  imageSourceCommit: string;
   chartRepository: string;
   chartName: string;
   chartVersionConstraint: string;
@@ -205,6 +210,10 @@ export const DEFAULT_DEPLOYMENT: DeploymentDefaults = {
   imageRepository: 'ghcr.io/lurodrisilva/net-hexagonal',
   imageTag: 'latest',
   imageDigest: 'sha256:cd3092d4e7440a49eb6f34de582c58958c6d0f642f52b10d860e3318a0f9ce61',
+  // net-hexagonal HEAD — the demo image's source repo (the image carries no
+  // revision label). Provenance for the deploy record; refresh alongside the
+  // digest above.
+  imageSourceCommit: '95a2fd2a84c349b6f17f4a677fd228c0bbeb9ac2',
   chartRepository: 'ghcr.io/lurodrisilva/helm-charts',
   chartName: 'hex-scaffold-umbrella',
   chartVersionConstraint: '*',
@@ -245,9 +254,15 @@ export function buildDeploymentRequest(
       appProject: d.appProject,
     },
     values: buildOverlay(tunables),
-    // The portal is not a CI runner, so provenance is empty; the orchestrator
-    // treats these as optional.
-    source: {},
+    // The portal is not a CI runner, so CI provenance (run id / attempt) is
+    // omitted — the orchestrator treats those as optional. gitSha is NOT
+    // optional: the domain requires a ≥7-char sha (ShortSHA drives the
+    // deployment version / component id), so send the image's source commit.
+    source: {
+      gitSha: d.imageSourceCommit,
+      gitRef: 'refs/heads/master',
+      workflowName: 'developer-portal',
+    },
     correlationId: `portal-${crypto.randomUUID()}`,
   };
 }
