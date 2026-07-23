@@ -55,7 +55,9 @@ export const NewProjectInit: React.FC<NewProjectInitProps> = ({ setScreen, setAp
         // session the token is "" and the poll surfaces a 401 error instead of
         // navigating away; the user re-authenticates via an explicit action.
         const token = authConfigured ? await getTokenSilent() : '';
-        const status = await getApp(scaffold.appName, token);
+        // Poll by repoName (the repo that materializes, with its collision
+        // suffix), not appName — the orchestrator's status URL targets it.
+        const status = await getApp(scaffold.repoName, token);
         if (cancelled) return;
         setAppStatus(status);
         if (status.ready) {
@@ -157,7 +159,7 @@ export const NewProjectInit: React.FC<NewProjectInitProps> = ({ setScreen, setAp
               <div className="text-sm">
                 <p className="font-bold text-[#001f2a]">Repository scaffolded</p>
                 <p className="text-xs text-[#424655] mt-1">
-                  <span className="font-mono">{scaffold.appName}</span> is ready
+                  <span className="font-mono">{scaffold.repoName}</span> is ready
                   {appStatus?.defaultBranch ? <> on <span className="font-mono">{appStatus.defaultBranch}</span></> : null}.
                 </p>
                 <a
@@ -224,7 +226,7 @@ export const NewProjectInit: React.FC<NewProjectInitProps> = ({ setScreen, setAp
               <div className="flex items-center gap-3 p-4 bg-[#e6f6ff] border border-[#0056c5]/10 rounded-xl text-sm">
                 <Loader2 className="w-4 h-4 text-[#0056c5] animate-spin shrink-0" />
                 <span className="text-[#001f2a]">
-                  Creating repository <span className="font-mono">{scaffold?.appName}</span>… waiting for it to become ready.
+                  Creating repository <span className="font-mono">{scaffold?.repoName}</span>… waiting for it to become ready.
                 </span>
               </div>
             )}
