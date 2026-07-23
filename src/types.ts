@@ -138,9 +138,12 @@ export interface DeploymentStatus {
   durationMs?: number;
 }
 
-// AppScaffoldResult is the 202 response from POST /api/v1/apps.
+// AppScaffoldResult is the 202 response from POST /api/v1/apps. appName is the
+// clean app identity; repoName is the actual repository (carries a collision-
+// avoidance suffix) — poll getApp by repoName, not appName.
 export interface AppScaffoldResult {
   appName: string;
+  repoName: string;
   repository: string;
   repoUrl: string;
   statusUrl: string;
