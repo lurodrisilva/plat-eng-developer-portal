@@ -192,10 +192,19 @@ export interface DeploymentDefaults {
 
 // DEFAULT_DEPLOYMENT are the platform defaults for the create-body fields the
 // wizard cannot supply yet. Overridable per call via buildDeploymentRequest opts.
+//
+// The orchestrator pins every deployment to an immutable image DIGEST — the
+// domain's NewImage rejects an empty (or non-`sha256:`) digest, so an empty
+// default fails create with `422 DEPLOYMENT_FAILED: image digest is required`
+// (the tunables-only `:validate` endpoint doesn't build the Image, so it still
+// passes). Until the wizard collects a real image, default to the proven
+// net-hexagonal app image the Phase G deploy runs on the cluster. Refresh the
+// digest with `crane digest ghcr.io/lurodrisilva/net-hexagonal:<tag>` or from a
+// running pod's `imageID`.
 export const DEFAULT_DEPLOYMENT: DeploymentDefaults = {
-  imageRepository: 'ghcr.io/lurodrisilva/hex-scaffold',
+  imageRepository: 'ghcr.io/lurodrisilva/net-hexagonal',
   imageTag: 'latest',
-  imageDigest: '',
+  imageDigest: 'sha256:cd3092d4e7440a49eb6f34de582c58958c6d0f642f52b10d860e3318a0f9ce61',
   chartRepository: 'ghcr.io/lurodrisilva/helm-charts',
   chartName: 'hex-scaffold-umbrella',
   chartVersionConstraint: '*',
