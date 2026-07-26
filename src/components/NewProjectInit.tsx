@@ -37,7 +37,10 @@ export const NewProjectInit: React.FC<NewProjectInitProps> = ({ setScreen, setAp
   const [appStatus, setAppStatus] = useState<AppStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const identity: AppIdentity = { name, team, domain, description };
+  // repoName is only known once the scaffold has been dispatched — it carries a
+  // suffix the orchestrator generates. Empty until then, which is why the deploy
+  // step gates on it.
+  const identity: AppIdentity = { name, team, domain, description, repoName: scaffold?.repoName ?? '' };
   const canScaffold = name.trim() !== '' && team.trim() !== '';
   // Real scaffolding needs a Bearer token, so it requires a configured + signed
   // -in Entra session. In mock mode we say so rather than fire a doomed request.
@@ -107,25 +110,38 @@ export const NewProjectInit: React.FC<NewProjectInitProps> = ({ setScreen, setAp
   };
 
   // Continue to the configure step with the freshly scaffolded app as identity.
+  //
+  // repoName is threaded because GET /api/v1/apps/{name} is keyed on it, and the
+  // deploy step needs that endpoint to learn which chart and image this app
+  // actually publishes. Without it the deploy has no artifact to name.
   const proceedToConfigure = () => {
     setAppIdentity({
       name: name.trim(),
       team: team.trim(),
       domain: domain.trim(),
       description: description.trim(),
+      repoName: scaffold?.repoName ?? '',
     });
     setScreen('configure-app');
   };
 
-  // The three AI-assisted cards are mock/preview paths: they carry a coherent
-  // demo identity forward (matching the configure-step summary) so the deploy
-  // flow stays runnable without real scaffolding.
+  // The three AI-assisted cards are mock/preview paths. They scaffold nothing, so
+  // they carry NO repoName — and that now makes them undeployable rather than
+  // silently deployable.
+  //
+  // That is the point. Until this slice, a mock path could reach the deploy
+  // button and create a real deployment out of hardcoded constants: the
+  // TEMPLATE's umbrella and the TEMPLATE's image, under the demo app's name
+  // (defect D4). The wizard walked green while deploying somebody else's code.
+  // With the constants gone there is nothing to fall back to, and the confirm
+  // step says so instead of inventing an artifact.
   const startMock = () => {
     setAppIdentity({
       name: 'payment-gateway-v2',
       team: 'payments',
       domain: 'ecommerce',
       description: 'AI-assisted demo application (mock path).',
+      repoName: '',
     });
     setScreen('configure-app');
   };
