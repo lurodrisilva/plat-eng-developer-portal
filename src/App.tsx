@@ -6,8 +6,8 @@ import { NewProjectInit } from './components/NewProjectInit';
 import { ConfigureApp } from './components/ConfigureApp';
 import { ConfirmAssembly } from './components/ConfirmAssembly';
 import { AppDetails } from './components/AppDetails';
-import { AppIdentity, Screen, Tunables } from './types';
-import { DEFAULT_TUNABLES } from './lib/api';
+import { AppIdentity, Dependencies, Screen, Tunables } from './types';
+import { DEFAULT_DEPENDENCIES, DEFAULT_TUNABLES } from './lib/api';
 import { AuthProvider } from './lib/authContext';
 
 const App: React.FC = () => {
@@ -15,6 +15,12 @@ const App: React.FC = () => {
   // J3 custom-tuning state, shared between the config wizard (writes) and the
   // confirm screen (validates against the orchestrator BFF).
   const [tunables, setTunables] = useState<Tunables>(DEFAULT_TUNABLES);
+  // Declared dependencies (ADR-0023), lifted for the same reason as tunables:
+  // the configure screen collects them and the confirm screen sends them. Held
+  // here rather than in ConfigureApp so navigating back and forth does not
+  // silently reset a shape the user chose — and so the confirm screen shows the
+  // resources the request actually carries instead of a static list.
+  const [dependencies, setDependencies] = useState<Dependencies>(DEFAULT_DEPENDENCIES);
   // Phase F: the application being created (captured by the scaffold step) and
   // the id of the real deployment created on confirm. Threaded so the confirm
   // step can build the create body and the dashboard/details can show live
@@ -29,12 +35,22 @@ const App: React.FC = () => {
       case 'new-project-init':
         return <NewProjectInit setScreen={setCurrentScreen} setAppIdentity={setAppIdentity} />;
       case 'configure-app':
-        return <ConfigureApp setScreen={setCurrentScreen} tunables={tunables} setTunables={setTunables} appIdentity={appIdentity} />;
+        return (
+          <ConfigureApp
+            setScreen={setCurrentScreen}
+            tunables={tunables}
+            setTunables={setTunables}
+            dependencies={dependencies}
+            setDependencies={setDependencies}
+            appIdentity={appIdentity}
+          />
+        );
       case 'confirm-assembly':
         return (
           <ConfirmAssembly
             setScreen={setCurrentScreen}
             tunables={tunables}
+            dependencies={dependencies}
             appIdentity={appIdentity}
             onDeploymentCreated={setDeploymentId}
           />
@@ -42,7 +58,16 @@ const App: React.FC = () => {
       case 'app-details':
         return <AppDetails setScreen={setCurrentScreen} deploymentId={deploymentId} appIdentity={appIdentity} />;
       case 'edit-app':
-        return <ConfigureApp setScreen={setCurrentScreen} tunables={tunables} setTunables={setTunables} appIdentity={appIdentity} />; // Reuse for demo
+        return (
+          <ConfigureApp
+            setScreen={setCurrentScreen}
+            tunables={tunables}
+            setTunables={setTunables}
+            dependencies={dependencies}
+            setDependencies={setDependencies}
+            appIdentity={appIdentity}
+          />
+        ); // Reuse for demo
       default:
         return <Dashboard setScreen={setCurrentScreen} deploymentId={deploymentId} appIdentity={appIdentity} />;
     }

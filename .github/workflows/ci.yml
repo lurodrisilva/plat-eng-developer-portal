@@ -17,5 +17,12 @@ jobs:
       - run: npm ci
       - name: typecheck
         run: npm run lint
+      # Asserts the VALUES of the request bodies the create wizard builds, which
+      # is what a typecheck cannot see: a Helm overlay scoped to the wrong key is
+      # discarded silently (defect D3), and a hardcoded chart name or image
+      # digest produces a perfectly well-typed request that deploys the wrong
+      # application (defect D4).
+      - name: request-contract
+        run: npm run check:contract
       - name: build
         run: npm run build
