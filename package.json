@@ -11,7 +11,8 @@
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
     "check:contract": "tsx scripts/check-contract.ts",
-    "check:entrypoint": "sh scripts/check-entrypoint.sh"
+    "check:entrypoint": "sh scripts/check-entrypoint.sh",
+    "check:image": "bash scripts/check-image.sh"
   },
   "dependencies": {
     "@azure/msal-browser": "^5.17.1",

@@ -32,6 +32,34 @@ npm run check:contract    # asserts the VALUES of the requests the wizard builds
 npm run check:entrypoint  # runs the container entrypoint and loads its output
 ```
 
+## Container image
+
+```bash
+docker build -t portal:local .
+npm run check:image -- portal:local   # starts it and probes the running container
+```
+
+Multi-stage: `node:22-alpine` builds, `nginxinc/nginx-unprivileged:1.29-alpine` serves on **8080** as
+UID 101. The build stage runs `lint`, `check:contract` and `check:entrypoint` before `build`, so an image
+cannot be produced from a tree that fails them.
+
+- **Nothing environment-specific is baked in.** There is deliberately no build `ARG` for any `VITE_*`
+  value — the bundle is identical for every environment and the configuration arrives at start.
+- **The webroot is root-owned and unwritable by the runtime user.** Runtime config is rendered to
+  `/etc/portal/config.js` (`PORTAL_CONFIG_PATH`) and served through an nginx `alias`, so the running
+  container cannot rewrite the files it serves and `readOnlyRootFilesystem` stays available.
+- The entrypoint is dropped into `/docker-entrypoint.d/`, so nginx's own init still runs.
+- `config.js` and `index.html` are `no-store`; `/assets/` is `immutable`. A cached `config.js` would pin
+  a browser to whichever environment it loaded first.
+- `X-Frame-Options` is **`SAMEORIGIN`, never `DENY`** — MSAL renews tokens silently through a hidden
+  iframe that returns to this origin, and `DENY` breaks that leg quietly.
+
+Published to `acrdevbf6cc837.azurecr.io/developer-portal:sha-<short>` on merge to `main`
+(`.github/workflows/release.yml`), authenticated by a GitHub OIDC federated credential on
+`uami-acr-cicd-push-dev` — no registry password, no service principal secret, no PAT. The image is
+**pushed only after it has been run and probed**, and the digest appears in the run summary for the
+chart to pin.
+
 ## Configuration
 
 **The image is environment-agnostic.** Nothing about a tenant or an orchestrator origin is baked
