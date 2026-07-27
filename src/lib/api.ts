@@ -183,10 +183,20 @@ export function buildResources(d: Dependencies): ResourceSpec[] {
 // validateTunables asks the orchestrator whether the overlay is allowed for the
 // target environment (J3). Governance stays server-side: the browser never
 // decides — it renders the verdict the orchestrator returns.
-export async function validateTunables(t: Tunables, appValuesKey: string): Promise<ValidateResult> {
+//
+// Takes a token like every other /api/v1 call. This endpoint used to be
+// anonymous and is not any more: its response is a readout of the governance
+// rules — which knobs are locked, per environment — so it is authenticated even
+// though it mutates nothing. Callers must acquire the token BEFORE the dry-run,
+// not between the dry-run and the create.
+export async function validateTunables(
+  t: Tunables,
+  appValuesKey: string,
+  token: string,
+): Promise<ValidateResult> {
   const res = await fetch(`${BASE}/api/v1/deployments:validate`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders(token),
     // The SAME overlay the create will send, alias and all. A dry-run of a
     // differently-scoped overlay would vet a request that is never made.
     body: JSON.stringify({ environment: t.environment, values: buildOverlay(t, appValuesKey) }),

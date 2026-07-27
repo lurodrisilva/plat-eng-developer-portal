@@ -127,7 +127,20 @@ export const ConfirmAssembly: React.FC<ConfirmAssemblyProps> = ({
       return;
     }
 
-    // 1) Advisory J3 check on the values overlay. Scoped to the SAME subchart key
+    // 1) Acquire the token FIRST. Both the dry-run and the create are
+    //    authenticated now, so acquiring it between them would 401 the dry-run
+    //    and the wizard would report "validation failed" for a signed-out user
+    //    rather than sending them to sign in.
+    let token = '';
+    if (authConfigured) {
+      token = await getToken();
+      if (!token) {
+        setInfo('Redirecting to sign in…');
+        return;
+      }
+    }
+
+    // 2) Advisory J3 check on the values overlay. Scoped to the SAME subchart key
     //    the create will use, so the dry-run vets the request actually made.
     //
     //    It does NOT cover `resources[]`: :validate takes an environment and a
@@ -136,7 +149,7 @@ export const ConfirmAssembly: React.FC<ConfirmAssemblyProps> = ({
     setValidating(true);
     let verdict: ValidateResult;
     try {
-      verdict = await validateTunables(tunables, deployable.chart.appValuesKey);
+      verdict = await validateTunables(tunables, deployable.chart.appValuesKey, token);
       setResult(verdict);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'validation failed');
@@ -146,19 +159,9 @@ export const ConfirmAssembly: React.FC<ConfirmAssemblyProps> = ({
     setValidating(false);
     if (verdict.blocked) return;
 
-    // 2) Real create. When Entra is configured a signed-in token is required;
-    //    getToken redirects to sign in when there is no session (returns "").
+    // 3) Real create, with the token acquired above.
     setCreating(true);
     try {
-      let token = '';
-      if (authConfigured) {
-        token = await getToken();
-        if (!token) {
-          setInfo('Redirecting to sign in…');
-          setCreating(false);
-          return;
-        }
-      }
       const body = buildDeploymentRequest(appId, team, tunables, deployable, resources);
       const res = await createDeployment(body, token);
       setDeploymentId(res.deploymentId);
