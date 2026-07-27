@@ -55,8 +55,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
+  // authConfigured() is CALLED here — it reads runtime configuration
+  // (src/lib/config.ts), which the container renders at start, so it cannot be a
+  // module constant. Resolving it once at the provider keeps every consuming
+  // screen on a plain boolean: the config change stops at this line.
   const value = useMemo<AuthContextValue>(
-    () => ({ account, authConfigured, ready, signIn, signOut, getToken, getTokenSilent }),
+    () => ({ account, authConfigured: authConfigured(), ready, signIn, signOut, getToken, getTokenSilent }),
     [account, ready],
   );
 

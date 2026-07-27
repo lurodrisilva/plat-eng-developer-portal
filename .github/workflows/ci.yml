@@ -24,5 +24,12 @@ jobs:
       # application (defect D4).
       - name: request-contract
         run: npm run check:contract
+      # Executes the container entrypoint on this runner and loads its output
+      # with node. A shell script shipped in one slice and first run in another
+      # is how the certificate CronJob reached production with no shell in its
+      # image; here the failure would be quieter still — a malformed config.js
+      # leaves the SPA silently serving build-time configuration.
+      - name: entrypoint-contract
+        run: npm run check:entrypoint
       - name: build
         run: npm run build
