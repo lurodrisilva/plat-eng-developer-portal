@@ -11,6 +11,10 @@
  *   D4  the chart name and image digest were hardcoded constants, so every app
  *       the wizard created deployed the TEMPLATE's code under the new app's
  *       name. The request was well-typed and well-formed and wrong.
+ *   P3  configuration read at IMPORT rather than at use silently pins one image
+ *       to one environment: the container renders /config.js at start, so a
+ *       module-level constant has already captured the build-time value by the
+ *       time it matters. Both spellings typecheck and both build.
  *
  * A typecheck cannot see either, and neither can a running browser without a
  * live cluster to notice the pod is running somebody else's image. So the
@@ -28,9 +32,11 @@ import {
   buildResources,
   describeNotDeployable,
   resolveDeployable,
+  validateTunables,
   type DeployableApp,
 } from '@/src/lib/api';
-import type { AppStatus, Dependencies, Tunables } from '@/src/types';
+import { readConfig, runtimeConfig, type RuntimeConfig } from '@/src/lib/config';
+import type { AppStatus, Dependencies, Tunables, ValidateResult } from '@/src/types';
 
 let failures = 0;
 
@@ -210,6 +216,99 @@ console.log('\nbuildDeploymentRequest — every artifact must come from the reso
     !('resources' in clean),
     'so a create that asks for no override is byte-identical to a pre-S6 body',
   );
+}
+
+console.log('\nruntime configuration — the image must not be pinned to one environment (P3)');
+{
+  // The assertion that matters is at the FETCH BOUNDARY, not on the resolver.
+  // readConfig() can be perfectly correct while api.ts still captures its result
+  // into a module constant at import — and a constant is exactly the defect,
+  // because the deployed value only arrives when the container renders
+  // /config.js at start. So: change the runtime config and observe the URL the
+  // request is actually made to, twice, in one process.
+  let lastUrl = '';
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = ((input: unknown) => {
+    lastUrl = String(input);
+    const body: ValidateResult = {
+      environment: 'development',
+      mode: 'audit',
+      violations: [],
+      blocked: false,
+    };
+    return Promise.resolve(
+      new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+  }) as typeof globalThis.fetch;
+
+  const setRuntime = (rt: RuntimeConfig | undefined) => {
+    (globalThis as { __PORTAL_CONFIG__?: RuntimeConfig }).__PORTAL_CONFIG__ = rt;
+  };
+
+  try {
+    setRuntime({ VITE_ORCHESTRATOR_URL: 'https://orchestrator.example' });
+    await validateTunables(DEFAULT_TUNABLES, 'app', 'token');
+    eq(
+      'the request goes to the runtime-configured origin',
+      lastUrl,
+      'https://orchestrator.example/api/v1/deployments:validate',
+    );
+
+    // The same process, a different value. This fails if the base was read once
+    // at import — which is the regression, stated as a test.
+    setRuntime({ VITE_ORCHESTRATOR_URL: '' });
+    await validateTunables(DEFAULT_TUNABLES, 'app', 'token');
+    eq(
+      'an EMPTY runtime origin means same-origin, not the baked default',
+      lastUrl,
+      '/api/v1/deployments:validate',
+    );
+  } finally {
+    globalThis.fetch = realFetch;
+    setRuntime(undefined);
+  }
+
+  // Precedence is by key PRESENCE. `runtime || baked` is the idiom that reads
+  // naturally and is wrong here: the deployed ConfigMap ships an EMPTY
+  // orchestrator URL on purpose (same-origin, ADR-0024), and an empty client id
+  // is the mock-mode switch. Truthiness cannot tell "set to empty" from "not
+  // set", so it would re-pin the image to whatever was baked.
+  //
+  // THE BAKED VALUES BELOW MUST BE NON-EMPTY. Under plain Node import.meta.env
+  // is empty, so asserting against the real environment compares "" to "" and
+  // passes whichever way the precedence is written — a green test proving
+  // nothing. That is not hypothetical: the first version of these assertions
+  // survived a deliberate rewrite of the resolver to `rt[key] || env[key]`.
+  const baked = {
+    VITE_ORCHESTRATOR_URL: 'https://baked-at-build-time.example',
+    VITE_ENTRA_CLIENT_ID: 'baked-client-id',
+    VITE_ENTRA_AUTHORITY: 'https://login.microsoftonline.com/baked-tenant',
+  };
+  eq('an absent key falls through to the baked value',
+    readConfig({}, baked).orchestratorUrl, 'https://baked-at-build-time.example');
+  eq('an absent key with nothing baked uses the default',
+    readConfig({}, {}).entraAuthority, 'https://login.microsoftonline.com/common');
+  eq('a present-but-empty orchestrator URL beats the baked one (same-origin)',
+    readConfig({ VITE_ORCHESTRATOR_URL: '' }, baked).orchestratorUrl, '');
+  eq('a present-but-empty client id beats the baked one (mock mode)',
+    readConfig({ VITE_ENTRA_CLIENT_ID: '' }, baked).entraClientId, '');
+  eq('a present value wins over the baked value',
+    readConfig({ VITE_ENTRA_AUTHORITY: 'https://login.microsoftonline.com/8f77fb2e' }, baked)
+      .entraAuthority,
+    'https://login.microsoftonline.com/8f77fb2e');
+  // A key present with a null value is still PRESENT. The entrypoint only ever
+  // emits strings, so this is reachable by a hand-edited config.js — and it must
+  // resolve the same way an empty string does rather than quietly restoring the
+  // baked value.
+  eq('a present null is empty, not a fall-through',
+    readConfig({ VITE_ORCHESTRATOR_URL: null as unknown as string }, baked).orchestratorUrl, '');
+  // A malformed or missing /config.js must not take the app down: every key
+  // falls through rather than throwing during module evaluation.
+  eq('a missing runtime object is survivable',
+    readConfig(runtimeConfig(), baked).entraClientId, 'baked-client-id');
 }
 
 console.log(

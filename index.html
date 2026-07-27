@@ -4,6 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>My Google AI Studio App</title>
+    <!-- Runtime configuration (slice P3). A CLASSIC script, deliberately: it
+         executes during parsing, before the deferred type="module" bundle
+         below, so window.__PORTAL_CONFIG__ is already set by the time any
+         module evaluates. Do NOT add defer/async or type="module" here.
+         In the container the entrypoint rewrites this file from environment at
+         start (scripts/docker-entrypoint.sh); the committed copy under public/
+         is an empty object, so local dev keeps reading .env.local. -->
+    <script src="/config.js"></script>
   </head>
   <body>
     <div id="root"></div>

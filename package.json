@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "check:contract": "tsx scripts/check-contract.ts"
+    "check:contract": "tsx scripts/check-contract.ts",
+    "check:entrypoint": "sh scripts/check-entrypoint.sh"
   },
   "dependencies": {
     "@azure/msal-browser": "^5.17.1",

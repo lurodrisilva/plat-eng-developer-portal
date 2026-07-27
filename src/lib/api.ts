@@ -12,16 +12,17 @@ import {
   Tunables,
   ValidateResult,
 } from '@/src/types';
+import { apiBase } from './config';
 
-// Base URL of the orchestrator BFF. Empty default → same-origin, so the Vite
-// dev proxy (vite.config.ts) forwards /api to the orchestrator without CORS.
+// Base URL of the orchestrator BFF. Empty → same-origin, so the browser calls
+// /api/v1/... on the page's own origin (the deployed shape, ADR-0024) and the
+// Vite dev proxy (vite.config.ts) forwards it locally. No CORS either way.
 //
-// `import.meta.env?` rather than `import.meta.env.`: Vite defines env at build
-// time, but plain Node (which scripts/check-contract.ts uses to assert the shape
-// of the request bodies this module builds) leaves it undefined, and reading a
-// property off it would throw at import. The optional chain is what lets the
-// request contract be checked without a browser or a bundler.
-const BASE = import.meta.env?.VITE_ORCHESTRATOR_URL ?? '';
+// apiBase() is called INSIDE each request rather than captured into a module
+// constant, because the deployed value arrives from /config.js at container
+// start (src/lib/config.ts) — a constant would freeze whatever was baked at
+// build time and pin the image to one environment. scripts/check-contract.ts
+// asserts the URL fetch is actually called with, so re-hoisting it fails CI.
 
 export const DEFAULT_TUNABLES: Tunables = {
   environment: 'production',
@@ -194,7 +195,7 @@ export async function validateTunables(
   appValuesKey: string,
   token: string,
 ): Promise<ValidateResult> {
-  const res = await fetch(`${BASE}/api/v1/deployments:validate`, {
+  const res = await fetch(`${apiBase()}/api/v1/deployments:validate`, {
     method: 'POST',
     headers: authHeaders(token),
     // The SAME overlay the create will send, alias and all. A dry-run of a
@@ -257,7 +258,7 @@ export async function createDeployment(
   body: DeploymentRequest,
   token: string,
 ): Promise<CreateDeploymentResult> {
-  const res = await fetch(`${BASE}/api/v1/deployments`, {
+  const res = await fetch(`${apiBase()}/api/v1/deployments`, {
     method: 'POST',
     headers: authHeaders(token),
     body: JSON.stringify(body),
@@ -271,7 +272,7 @@ export async function createDeployment(
 // getDeployment reads the live deployment DTO (GET /api/v1/deployments/{id}) —
 // status plus Argo sync/health — for the create wizard's live-status poll.
 export async function getDeployment(id: string, token: string): Promise<DeploymentStatus> {
-  const res = await fetch(`${BASE}/api/v1/deployments/${encodeURIComponent(id)}`, {
+  const res = await fetch(`${apiBase()}/api/v1/deployments/${encodeURIComponent(id)}`, {
     headers: authHeaders(token),
   });
   if (!res.ok) {
@@ -312,7 +313,7 @@ export async function createApp(
   },
   token: string,
 ): Promise<AppScaffoldResult> {
-  const res = await fetch(`${BASE}/api/v1/apps`, {
+  const res = await fetch(`${apiBase()}/api/v1/apps`, {
     method: 'POST',
     headers: authHeaders(token),
     body: JSON.stringify(body),
@@ -326,7 +327,7 @@ export async function createApp(
 // getApp reads scaffold status (GET /api/v1/apps/{name}) — poll until ready is
 // true, then the repo exists and the user can move on to configure + deploy.
 export async function getApp(name: string, token: string): Promise<AppStatus> {
-  const res = await fetch(`${BASE}/api/v1/apps/${encodeURIComponent(name)}`, {
+  const res = await fetch(`${apiBase()}/api/v1/apps/${encodeURIComponent(name)}`, {
     headers: authHeaders(token),
   });
   if (!res.ok) {
