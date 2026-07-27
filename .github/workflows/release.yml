@@ -1,0 +1,183 @@
+name: release
+
+# Builds the portal image and publishes it to the platform ACR (slice P4).
+#
+# Triggers:
+#   pull_request → build + Dockerfile lint + image contract check, NO push
+#   push to main → the same, then push `sha-<short>` to ACR
+#
+# SECRETLESS. Authentication is a GitHub OIDC token exchanged for an Azure
+# token against a federated credential on `uami-acr-cicd-push-dev`, which holds
+# AcrPush (ADR-0021 gate 1, aks-foundation acr_cicd_identities.tf). There is no
+# registry password, no service principal secret and no PAT in this repository.
+# The credential's subject is the exact string
+# `repo:lurodrisilva/plat-eng-developer-portal:ref:refs/heads/main` — a token
+# minted for any other ref simply fails the exchange.
+#
+# The ids below are IDENTIFIERS, not secrets: a client id, a tenant id and a
+# subscription id are all discoverable and none of them authorise anything on
+# their own. They are literals rather than repo variables so that this workflow
+# has no invisible setup step — the failure mode of a missing variable is an
+# opaque login error days later.
+#
+# Security posture, matching net-hexagonal release.yml:
+#   * permissions: {} at the workflow floor, widened per job
+#   * every action SHA-pinned with its tag in a comment
+#   * untrusted/dynamic values pass through env:, never interpolated into run:
+#   * build-provenance attestation on every published digest
+#
+# THE IMAGE IS PUSHED ONLY AFTER IT HAS BEEN RUN. The build loads locally, the
+# contract check starts the container and probes it, and only then does the
+# digest reach the registry — so what was tested and what was published are the
+# same artifact rather than two builds of the same commit.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  REGISTRY: acrdevbf6cc837.azurecr.io
+  IMAGE_NAME: developer-portal
+  # uami-acr-cicd-push-dev — AcrPush on the registry (ADR-0021 gate 1).
+  AZURE_CLIENT_ID: d037e9d3-13cb-42b1-b614-b19ec0865976
+  AZURE_TENANT_ID: 8f77fb2e-7e77-477e-9a03-d078b7aad9c3
+  AZURE_SUBSCRIPTION_ID: 9654d8ca-c09a-4cb2-a843-2d5a7fc6a4cd
+
+jobs:
+  image:
+    name: build + probe + publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read      # checkout
+      id-token: write     # GitHub OIDC → Azure federated login, and attestation
+      attestations: write # write the provenance attestation
+    outputs:
+      digest: ${{ steps.publish.outputs.digest }}
+      tag: ${{ steps.publish.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      - name: Lint the Dockerfile (BuildKit --call=check)
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          call: check
+
+      - name: Derive tag and OCI labels
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # One immutable tag and nothing else. No `latest`, no `edge`: this
+          # platform already shipped defect D7, where a mutable reference ran
+          # the wrong repository's code, and phase G had to explain a mutable
+          # `phase-g` tag. P5 pins the DIGEST anyway.
+          flavor: latest=false
+          tags: type=sha,format=short
+          labels: |
+            org.opencontainers.image.title=${{ github.event.repository.name }}
+            org.opencontainers.image.source=${{ github.event.repository.html_url }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      # Single-arch: every node in aks-test is amd64, and a second architecture
+      # buys nothing but QEMU build time.
+      - name: Build image (load locally, do not push)
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Runs on PRs too, where nothing is published — a broken image is caught
+      # in review rather than after it has a digest in the registry.
+      - name: Image contract (run the container and probe it)
+        env:
+          IMAGE: ${{ steps.meta.outputs.tags }}
+        run: scripts/check-image.sh "$IMAGE"
+
+      - name: Log in to Azure (OIDC federated credential, no secret)
+        if: github.event_name != 'pull_request'
+        uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3.0.0
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Push to ACR
+        id: publish
+        if: github.event_name != 'pull_request'
+        env:
+          IMAGE: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          # Exchanges the CLI's AAD token for a registry credential. No admin
+          # user is enabled on this registry and no password exists to leak.
+          az acr login --name "${REGISTRY%%.*}"
+          docker push "$IMAGE"
+
+          # Read the digest back from the registry rather than trusting the
+          # push output's formatting.
+          REPO_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE")
+          DIGEST="${REPO_DIGEST##*@}"
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "tag=$IMAGE" >> "$GITHUB_OUTPUT"
+
+      # The repository is public, so the attestation API is available. It is
+      # stored in GitHub rather than pushed to the registry: ACR referrer
+      # support is one more thing that can fail at the very end of a publish,
+      # and `gh attestation verify` works either way.
+      - name: Attest build provenance (SLSA v1)
+        if: github.event_name != 'pull_request' && github.event.repository.visibility == 'public'
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.publish.outputs.digest }}
+
+      - name: Job summary
+        if: always()
+        env:
+          DIGEST: ${{ steps.publish.outputs.digest }}
+          TAG: ${{ steps.meta.outputs.tags }}
+          PUSHED: ${{ github.event_name != 'pull_request' }}
+          # Through env, never interpolated into run: — a ref is repository
+          # state, and the house rule does not carve out the ones that look safe.
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+        run: |
+          {
+            echo "## Portal image"
+            echo ""
+            echo "- Event: \`$EVENT\`  Ref: \`$REF\`"
+            echo "- Published: \`$PUSHED\`"
+            echo "- Tag: \`$TAG\`"
+            echo "- Digest: \`${DIGEST:-<not-published>}\`"
+            if [ "$PUSHED" = "true" ]; then
+              echo ""
+              echo "P5 pins this digest in the chart:"
+              echo '```yaml'
+              echo "image:"
+              echo "  repository: ${REGISTRY}/${IMAGE_NAME}"
+              echo "  digest: ${DIGEST}"
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
