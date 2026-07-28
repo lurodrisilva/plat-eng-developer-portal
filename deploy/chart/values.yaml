@@ -1,0 +1,93 @@
+replicaCount: 2
+
+image:
+  repository: acrdevbf6cc837.azurecr.io/developer-portal
+
+  # PINNED BY DIGEST, NEVER BY TAG. Defect D7 on this platform was a mutable
+  # reference that ran the wrong repository's code, and phase G had to explain a
+  # mutable `phase-g` tag. The templates refuse to render if this is missing or
+  # malformed, and refuse outright if `image.tag` is set — the rule is enforced
+  # by the chart rather than remembered by a reviewer.
+  #
+  # Bump this when the release workflow publishes a new image; the digest is in
+  # the run summary. That second commit is deliberate: publishing and deploying
+  # are separate acts, so a merge to main does not silently ship to the cluster.
+  digest: sha256:722aebf803be8dceb84d2eb3eabc5a172a7e18abea89be569d46cb6770b1c2d1
+
+  pullPolicy: IfNotPresent
+  # No imagePullSecrets anywhere: the kubelet identity holds AcrPull on this
+  # registry, which is why the orchestrator's Deployment has none either.
+
+# Runtime configuration, rendered into /config.js by the container entrypoint at
+# start (slice P3). Every key here becomes an environment variable.
+#
+# ABSENT AND EMPTY MEAN DIFFERENT THINGS, and the chart preserves the
+# difference. A key set to "" is rendered into the ConfigMap and reaches the
+# container as a set-but-empty variable, which the entrypoint emits as "" and
+# the app treats as authoritative. A key set to null is OMITTED entirely, the
+# variable is unset, the entrypoint leaves it out of the object, and the app
+# falls back to its build-time default. `runtime || baked` would collapse the
+# two; this chain does not.
+config:
+  # Empty = same-origin /api/v1. This is the whole point of the one-origin
+  # topology (ADR-0024) and must stay empty in every deployed environment.
+  VITE_ORCHESTRATOR_URL: ""
+  VITE_ENTRA_CLIENT_ID: fc41eb92-f230-40de-8f75-d9a374c85c35
+  VITE_ENTRA_AUTHORITY: https://login.microsoftonline.com/8f77fb2e-7e77-477e-9a03-d078b7aad9c3
+  VITE_ENTRA_SCOPE: api://224ccefb-cfa7-42ba-9440-1f1b03aaca72/deploy
+
+service:
+  port: 80
+  # The image is nginx-unprivileged: it runs as UID 101 and cannot bind a
+  # privileged port.
+  targetPort: 8080
+
+route:
+  enabled: true
+  hostname: xpdev-portal-dev.westus2.cloudapp.azure.com
+  path: /
+  gateway:
+    name: platform-origin
+    namespace: control-plane-system
+    # HTTPS ONLY, deliberately. Port 80 on that Gateway is the only path an ACME
+    # HTTP-01 challenge can take on this cluster, and ADR-0026 records it as
+    # load-bearing rather than a redirect convenience. Attaching a `/` prefix
+    # route to it would be safe on paper — the solver's exact-match path
+    # outranks a prefix — but the cost of being wrong is that certificates stop
+    # renewing, which stops sign-in. http://<host>/ therefore 404s at the
+    # Gateway. A redirect route can be added later by a slice that can prove a
+    # renewal afterwards.
+    sectionName: https
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    # No CPU limit: throttling a static file server buys nothing and adds
+    # latency to first paint. Memory is capped because a leak should be killed.
+    memory: 128Mi
+
+# The restricted Pod Security profile. P4 kept the webroot root-owned precisely
+# so this would be available; taking that cost without this benefit would be the
+# worse of both.
+#
+# readOnlyRootFilesystem needs THREE writable mounts, not one — nginx-unprivileged
+# keeps its pid and every temp path under /tmp and also writes /var/cache/nginx.
+# Miss any of them and the container crash-loops at start.
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 101
+  runAsGroup: 101
+  seccompProfile:
+    type: RuntimeDefault
+containerSecurityContext:
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: [ALL]
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+podAnnotations: {}

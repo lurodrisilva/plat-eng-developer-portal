@@ -1,0 +1,168 @@
+suite: developer-portal chart
+templates:
+  - deployment.yaml
+  - configmap.yaml
+  - httproute.yaml
+  - service.yaml
+tests:
+  # ---------------------------------------------------------------------------
+  # Digest pinning. Defect D7 was a mutable reference that ran the wrong
+  # repository's code: well-formed manifest, healthy deployment, somebody else's
+  # code. These assert the chart REFUSES the shapes that would allow it back.
+  # ---------------------------------------------------------------------------
+  - it: pins the image by digest
+    template: deployment.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: '^acrdevbf6cc837\.azurecr\.io/developer-portal@sha256:[a-f0-9]{64}$'
+
+  - it: refuses a tag outright
+    template: deployment.yaml
+    set:
+      image.tag: latest
+    asserts:
+      - failedTemplate:
+          errorMessage: "image.tag is refused: this chart pins by digest only (defect D7 — a mutable reference ran the wrong repository's code). Set image.digest to the sha256 the release workflow published."
+
+  - it: refuses a malformed digest
+    template: deployment.yaml
+    set:
+      image.digest: sha256:not-a-real-digest
+    asserts:
+      - failedTemplate: {}
+
+  - it: refuses an empty digest rather than rendering repo@
+    template: deployment.yaml
+    set:
+      image.digest: ""
+    asserts:
+      - failedTemplate: {}
+
+  # ---------------------------------------------------------------------------
+  # The configuration contract: absent and empty are different things all the
+  # way from values.yaml to window.__PORTAL_CONFIG__.
+  # ---------------------------------------------------------------------------
+  - it: keeps an empty orchestrator URL as a set-but-empty variable
+    template: configmap.yaml
+    asserts:
+      - equal:
+          path: data.VITE_ORCHESTRATOR_URL
+          value: ""
+
+  - it: omits a null key entirely so the variable is unset
+    template: configmap.yaml
+    set:
+      config.VITE_ENTRA_SCOPE: null
+    asserts:
+      - notExists:
+          path: data.VITE_ENTRA_SCOPE
+      # …while the neighbouring keys are untouched, so this is an omission and
+      # not an empty ConfigMap.
+      - exists:
+          path: data.VITE_ENTRA_CLIENT_ID
+
+  - it: feeds the configuration in as environment, which is what the entrypoint reads
+    template: deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].envFrom[0].configMapRef.name
+          value: developer-portal-config
+
+  - it: rolls the pods when the configuration changes
+    template: deployment.yaml
+    asserts:
+      - exists:
+          path: spec.template.metadata.annotations["checksum/config"]
+
+  # ---------------------------------------------------------------------------
+  # The restricted profile, and the three mounts that make it survivable.
+  # ---------------------------------------------------------------------------
+  - it: runs with a read-only root filesystem and no capabilities
+    template: deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          value: [ALL]
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.securityContext.seccompProfile.type
+          value: RuntimeDefault
+
+  - it: mounts every path nginx-unprivileged writes to
+    template: deployment.yaml
+    asserts:
+      # /tmp holds the pid AND every temp path; /var/cache/nginx is written too;
+      # /etc/portal is where the entrypoint renames config.js into place. A
+      # missing mount crash-loops the container at start.
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[0].mountPath
+          value: /etc/portal
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[1].mountPath
+          value: /tmp
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[2].mountPath
+          value: /var/cache/nginx
+
+  - it: gates traffic on the configuration having rendered, not just on nginx being up
+    template: deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /config.js
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /healthz
+
+  - it: declares no image pull secret
+    template: deployment.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.imagePullSecrets
+
+  # ---------------------------------------------------------------------------
+  # Route attachment.
+  # ---------------------------------------------------------------------------
+  - it: attaches to the shared Gateway's HTTPS listener only
+    template: httproute.yaml
+    asserts:
+      - equal:
+          path: spec.parentRefs[0].name
+          value: platform-origin
+      - equal:
+          path: spec.parentRefs[0].namespace
+          value: control-plane-system
+      # Port 80 is the only path an ACME HTTP-01 challenge can take on this
+      # cluster; this route stays off it.
+      - equal:
+          path: spec.parentRefs[0].sectionName
+          value: https
+
+  - it: serves the whole origin until a more specific route claims part of it
+    template: httproute.yaml
+    asserts:
+      - equal:
+          path: spec.rules[0].matches[0].path.value
+          value: /
+      - equal:
+          path: spec.hostnames[0]
+          value: xpdev-portal-dev.westus2.cloudapp.azure.com
+
+  - it: sends traffic to the portal Service on the port it actually listens on
+    template: service.yaml
+    asserts:
+      - equal:
+          path: spec.ports[0].targetPort
+          value: http
+      - equal:
+          path: spec.ports[0].port
+          value: 80
