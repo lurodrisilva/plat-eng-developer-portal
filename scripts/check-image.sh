@@ -111,6 +111,18 @@ try 'a deep link returns index.html (SPA fallback)' \
     "curl -fsS '${BASE}/apps/orders-v3/deploy' | grep -q 'id=\"root\"'" \
     "curl -sS -o /dev/null -w 'status=%{http_code}' '${BASE}/apps/orders-v3/deploy'"
 
+# 7b. …but an API path must NOT. The SPA fallback would answer it 200 with
+#     index.html, and a fetch() would pass res.ok and then fail inside
+#     res.json(), which looks like a portal bug instead of a missing route.
+#     Reachable whenever no more-specific /api/v1 route is attached.
+try 'an API path returns 404, not the SPA' \
+    "test \"\$(curl -s -o /dev/null -w '%{http_code}' '${BASE}/api/v1/deployments')\" = 404" \
+    "curl -s -o /dev/null -w 'status=%{http_code}' '${BASE}/api/v1/deployments'"
+
+try 'the API refusal is JSON, not HTML' \
+    "curl -s '${BASE}/api/v1/deployments' | grep -q '\"error\"'" \
+    "curl -s '${BASE}/api/v1/deployments' | head -3"
+
 # 8. index.html must not be cached — it names the hashed bundle.
 try 'index.html is no-store' \
     "curl -fsSI '${BASE}/' | grep -qi 'cache-control: *no-store'" \
