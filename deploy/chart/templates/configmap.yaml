@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "developer-portal.fullname" . }}-config
+  labels:
+    {{- include "developer-portal.labels" . | nindent 4 }}
+data:
+  {{- /*
+    A null value OMITS the key; an empty string KEEPS it.
+
+    That distinction is the whole configuration contract, carried end to end:
+    an omitted key means no environment variable, which means the entrypoint
+    leaves it out of window.__PORTAL_CONFIG__, which means the app falls back to
+    its build-time default. A key present with "" means a set-but-empty
+    variable, which the entrypoint emits as "" and the app treats as
+    authoritative — that is how an empty orchestrator URL means same-origin
+    rather than "unconfigured".
+
+    `kindIs "invalid"` is how a nil survives into a template; a plain `if $v`
+    would drop empty strings too and silently collapse the two cases.
+  */}}
+  {{- range $key, $value := .Values.config }}
+  {{- if not (kindIs "invalid" $value) }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+  {{- end }}
+
+  {{- /*
+    None of these are secrets. A client id, an authority and a scope are public
+    identifiers shipped to every browser that loads the page; putting them in a
+    Secret would imply a confidentiality this data does not have.
+  */}}

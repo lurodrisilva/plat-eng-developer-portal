@@ -1,0 +1,45 @@
+{{- if .Values.route.enabled }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "developer-portal.fullname" . }}
+  labels:
+    {{- include "developer-portal.labels" . | nindent 4 }}
+spec:
+  # The route lives in THIS workload's namespace and attaches to a Gateway in
+  # another. That split is what Gateway API's role model is for: the platform
+  # owns the origin and its certificate, each workload owns the paths it
+  # publishes. No ReferenceGrant is needed — that governs cross-namespace
+  # backendRefs, not route-to-Gateway attachment, which the Gateway's own
+  # allowedRoutes governs instead.
+  #
+  # That listener admits routes only from namespaces carrying the
+  # `platform-origin/publish: "true"` label. If this route ever reports
+  # `NotAllowedByListeners`, the namespace has lost the label rather than the
+  # route being wrong.
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: {{ .Values.route.gateway.name }}
+      namespace: {{ .Values.route.gateway.namespace }}
+      sectionName: {{ .Values.route.gateway.sectionName }}
+  hostnames:
+    - {{ .Values.route.hostname | quote }}
+  rules:
+    # A `/` prefix matches EVERYTHING on this origin, including /api/v1 until
+    # the orchestrator's route attaches (P6). Gateway API resolves the more
+    # specific path in favour of that route once it exists, so this rule
+    # narrows itself automatically — no edit here when P6 lands.
+    #
+    # In the meantime, and any time that route is detached, requests to /api
+    # reach this pod and nginx answers 404 rather than falling through to the
+    # SPA. Serving index.html to a fetch() returns 200 with HTML, which fails as
+    # a JSON parse error and reads as a portal bug instead of a missing route.
+    - matches:
+        - path:
+            type: PathPrefix
+            value: {{ .Values.route.path | quote }}
+      backendRefs:
+        - name: {{ include "developer-portal.fullname" . }}
+          port: {{ .Values.service.port }}
+{{- end }}

@@ -33,3 +33,26 @@ jobs:
         run: npm run check:entrypoint
       - name: build
         run: npm run build
+
+  chart:
+    name: helm lint + unittest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v3.16.3
+      - name: Install helm-unittest
+        run: helm plugin install https://github.com/helm-unittest/helm-unittest --version 1.0.3
+      - name: helm lint
+        run: helm lint deploy/chart
+      # ArgoCD renders this chart with no human in the loop, so a template that
+      # cannot render is an outage rather than a failed command. The suite also
+      # pins the two rules that are otherwise only prose: the image reference
+      # must be a digest (the chart REFUSES a tag — defect D7 ran the wrong
+      # repository's code from a mutable reference), and a null config value
+      # must be OMITTED from the ConfigMap while an empty string is KEPT, which
+      # is what makes an empty orchestrator URL mean same-origin rather than
+      # unconfigured.
+      - name: helm unittest
+        run: helm unittest deploy/chart

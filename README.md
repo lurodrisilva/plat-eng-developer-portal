@@ -54,6 +54,33 @@ cannot be produced from a tree that fails them.
 - `X-Frame-Options` is **`SAMEORIGIN`, never `DENY`** — MSAL renews tokens silently through a hidden
   iframe that returns to this origin, and `DENY` breaks that leg quietly.
 
+## Deployment
+
+`deploy/chart/` is the Helm chart ArgoCD renders — Deployment, Service, the runtime-config ConfigMap and
+the portal's own `HTTPRoute`, in namespace `platform-portal`. The `Application` that points here lives in
+the baseline-addons app-of-apps.
+
+```bash
+helm lint deploy/chart
+helm unittest deploy/chart
+helm template developer-portal deploy/chart --namespace platform-portal
+```
+
+- **The image is pinned by digest and the chart refuses a tag.** `helm template --set image.tag=latest`
+  fails to render, by design: defect D7 on this platform was a mutable reference that ran the wrong
+  repository's code, with a well-formed manifest and a healthy deployment.
+- **Bumping the image is a second commit.** Publishing and deploying are separate acts — a merge to `main`
+  builds and publishes, and changing `image.digest` here is what actually ships it.
+- **`config` values follow the same absent-vs-empty rule as everywhere else.** A key set to `""` is kept
+  and reaches the container as a set-but-empty variable; a key set to `null` is omitted, so the variable is
+  unset and the app falls back to its build-time default.
+- Readiness probes `/config.js`, not `/healthz`: a pod serving `index.html` with no rendered configuration
+  looks healthy and signs nobody in, so it must not receive traffic.
+- The route attaches to the Gateway's **HTTPS listener only**. Port 80 is the sole path an ACME HTTP-01
+  challenge can take on this cluster, so nothing else is put on it.
+- The namespace must carry `platform-origin/publish: "true"` or the Gateway refuses the route with
+  `NotAllowedByListeners`.
+
 Published to `acrdevbf6cc837.azurecr.io/developer-portal:sha-<short>` on merge to `main`
 (`.github/workflows/release.yml`), authenticated by a GitHub OIDC federated credential on
 `uami-acr-cicd-push-dev` — no registry password, no service principal secret, no PAT. The image is
