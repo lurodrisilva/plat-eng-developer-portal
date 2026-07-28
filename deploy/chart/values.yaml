@@ -12,7 +12,7 @@ image:
   # Bump this when the release workflow publishes a new image; the digest is in
   # the run summary. That second commit is deliberate: publishing and deploying
   # are separate acts, so a merge to main does not silently ship to the cluster.
-  digest: sha256:722aebf803be8dceb84d2eb3eabc5a172a7e18abea89be569d46cb6770b1c2d1
+  digest: sha256:de93f40c10bcce6b7adcf81aae4ff7e911da3a480ab6f9b0ec486e1c24eb17e5
 
   pullPolicy: IfNotPresent
   # No imagePullSecrets anywhere: the kubelet identity holds AcrPull on this

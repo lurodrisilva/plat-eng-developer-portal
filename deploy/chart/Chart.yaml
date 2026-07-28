@@ -9,12 +9,12 @@ type: application
 # Chart version. Bumped for chart changes; a new image is a values change (the
 # digest) and bumps this too, because ArgoCD tracks this path and the digest is
 # the only thing that decides which code runs.
-version: 0.1.0
+version: 0.2.0
 
 # The image tag this chart's default digest corresponds to. Informational — the
 # digest in values.yaml is authoritative, and the chart refuses to render from a
 # tag at all.
-appVersion: "sha-b14a584"
+appVersion: "sha-6756a87"
 
 home: https://github.com/lurodrisilva/plat-eng-developer-portal
 sources:
